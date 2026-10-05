@@ -1,0 +1,32 @@
+-- ProtocolSettings
+--
+-- Protocol defaults, per-identity overrides, and the tuning a radio actually ran.
+--
+-- Plan §8.2, landed verbatim: the schema is designed once and is
+-- forward-only from here. A change to it is a reviewed migration, not
+-- an edit — see docs/plans/status.md.
+
+CREATE TABLE protocol_radio_settings (
+  protocol_id TEXT PRIMARY KEY NOT NULL REFERENCES protocol(id) ON DELETE CASCADE,
+  freq_hz INTEGER NOT NULL CHECK (freq_hz > 0),
+  bandwidth_hz INTEGER NOT NULL CHECK (bandwidth_hz > 0),
+  sf INTEGER NOT NULL CHECK (sf BETWEEN 5 AND 12),
+  coding_rate INTEGER NOT NULL CHECK (coding_rate BETWEEN 5 AND 8),
+  power_dbm INTEGER NOT NULL CHECK (power_dbm BETWEEN 0 AND 22),
+  defaults_version INTEGER NOT NULL DEFAULT 1,
+  updated_at INTEGER NOT NULL
+) WITHOUT ROWID;
+
+CREATE TABLE identity_radio_settings (
+  identity_id TEXT PRIMARY KEY NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+  freq_hz INTEGER NOT NULL, bandwidth_hz INTEGER NOT NULL,
+  sf INTEGER NOT NULL, coding_rate INTEGER NOT NULL, power_dbm INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+) WITHOUT ROWID;
+
+CREATE TABLE radio_observed_tuning (
+  radio_id TEXT PRIMARY KEY NOT NULL REFERENCES radio_device(id) ON DELETE CASCADE,
+  freq_hz INTEGER NOT NULL, bandwidth_hz INTEGER NOT NULL, sf INTEGER NOT NULL,
+  coding_rate INTEGER NOT NULL, power_dbm INTEGER NOT NULL,
+  config_epoch INTEGER NOT NULL DEFAULT 0, observed_at INTEGER NOT NULL
+) WITHOUT ROWID;

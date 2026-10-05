@@ -4,6 +4,10 @@ kotlin = "2.2.21"
 # a 2.2.x toolchain cannot read; 6.4.x is the last line built with 2.2.21, the
 # toolchain meshpigeon-android and this repo share. Revisit when Kotlin moves.
 wire = "6.4.7"
+# SQLDelight 2.3+ publishes Kotlin/Native klibs built with Kotlin 2.3.x, the same
+# wall Wire 7.x hit (D4′); 2.2.1 is the newest line built with **2.2.21**, this
+# toolchain exactly. Revisit when Kotlin moves.
+sqldelight = "2.2.1"
 coroutines = "1.11.0"
 mavenPublish = "0.37.0"
 dokka = "2.2.0"
@@ -12,9 +16,17 @@ dokka = "2.2.0"
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 wire-runtime = { module = "com.squareup.wire:wire-runtime", version.ref = "wire" }
+sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
+sqldelight-coroutines = { module = "app.cash.sqldelight:coroutines-extensions", version.ref = "sqldelight" }
+# The SQLite dialect of SQLDelight's JDBC driver; `jdbc-driver` is the
+# transport and carries no driver of its own.
+sqldelight-native = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
+sqldelight-jdbc = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version = "3.50.1.0" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 wire = { id = "com.squareup.wire", version.ref = "wire" }
 mavenPublish = { id = "com.vanniktech.maven.publish", version.ref = "mavenPublish" }
 dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
+sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }

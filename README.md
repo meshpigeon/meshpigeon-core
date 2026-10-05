@@ -23,10 +23,11 @@ name, capabilities, health, a tuning. Adding a board is a firmware change.
 
 ## Status
 
-Phases P0, P1 and the first half of P2 of
+Phases P0, P1 and P2 of
 `docs/plans/2026-10-04-meshpigeon-core-and-cli-plan.md`: the radio API, the
-framing, the session, and both of the transports a radio can be reached on —
-TCP and USB-CDC. Storage, identity, protocols and the service layer follow.
+framing, the session, both of the transports a radio can be reached on — TCP and
+USB-CDC — and the one database behind them. Identity, protocols and the service
+layer follow in P3–P4; `/db` in the CLI lands with it.
 
 | Module | What it is |
 |---|---|
@@ -35,6 +36,8 @@ TCP and USB-CDC. Storage, identity, protocols and the service layer follow.
 | `core-transport` | `RadioApi` (the firmware's contract as domain types), `RadioSession`, the `RadioLink` SPI |
 | `core-link-tcp` | the Wi-Fi TCP transport — one source file per native platform |
 | `core-link-usb` | USB-CDC: `termios` on Linux and macOS, streams on the JVM, and the seam an Android USB host uses |
+| `core-domain` | the entities and repository interfaces, with no SQL in sight |
+| `core-storage` | the one SQLite database: plan §8.2's schema, the drivers, the radio repository, the one-process lock, the key store |
 | `core-testing` | published fakes: a radio that answers like the firmware, a clock, a logger |
 | `core-aggregate` | the `dev.meshpigeon:meshpigeon-core` artifact clients depend on |
 
@@ -68,6 +71,10 @@ Kotlin 2.2.21 · Gradle 8.14.5 · Linux, macOS and the JVM today; Windows
 returns with the rest of the Windows phase (see the notes in
 `core-link-tcp/build.gradle.kts` and `core-link-usb/build.gradle.kts`).
 
+The native SQLite driver links the system library (`libsqlite3` on Linux,
+`libsqlite3.dylib` on macOS), so building the native targets wants
+`libsqlite3-dev` on Linux; see the note in `core-storage/build.gradle.kts`.
+
 ## Publishing
 
 One coordinate to depend on, and the parts beneath it:
@@ -80,6 +87,8 @@ One coordinate to depend on, and the parts beneath it:
 | `dev.meshpigeon:meshpigeon-core-transport` | `RadioApi`, `RadioSession`, `RadioLink` |
 | `dev.meshpigeon:meshpigeon-core-link-tcp` | the Wi-Fi transport |
 | `dev.meshpigeon:meshpigeon-core-link-usb` | the USB-CDC transport |
+| `dev.meshpigeon:meshpigeon-core-domain` | entities and repository interfaces |
+| `dev.meshpigeon:meshpigeon-core-storage` | the database |
 | `dev.meshpigeon:meshpigeon-core-testing` | the fakes (test scope, never in the aggregate) |
 
 Each has one publication per target (`-jvm`, `-linuxx64`, `-macosarm64`, …); the
@@ -112,7 +121,8 @@ rather than as a client that misreads a field.
   natively, because a JVM-only run would not prove the native one.
 * **Platform code is tested against the platform.** `TermiosPtyTest` opens a
   pty through the USB link and checks what the kernel does with it, so the
-  cinterop is verified without a radio on the desk.
+  cinterop is verified without a radio on the desk. `NativeSecretsAndLockTest`
+  checks that the key file and the lock really are `0600` on disk.
 
 ## Licence
 

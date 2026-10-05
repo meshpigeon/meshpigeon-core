@@ -107,6 +107,37 @@ Two decisions are worth knowing before touching it:
   cannot prove is the cable, the enumeration and a baud rate a real bridge
   negotiates — those stay with the hardware.
 
+## The one database
+
+```
+radio_device ──1:n──► radio_link          22 tables in all (plan §8.2), and only
+      │                   │                the radio half has Kotlin behind it yet
+      └── radio_observed_tuning
+```
+
+The schema is landed whole and used in pieces. That is deliberate: a migration
+that adds twenty tables is a review nobody reads carefully, whereas twenty small
+migrations are twenty reviews, and the plan's rule is that a migration is
+forward-only and never edited afterwards.
+
+Four decisions carry the weight:
+
+* **`core-domain` has the interface, `core-storage` has the SQL.** A generated
+  table class never leaves `core-storage`, which is what lets `RadioRepository`
+  live in `core-domain` and lets `core-testing` supply an in-memory one.
+* **The pragmas are a connection concern, not a statement.** `foreign_keys=ON`
+  is silently ignored inside a transaction and applies per connection, so the
+  JVM driver sets it through the connection configuration and the native driver
+  applies it as the connection opens. `SqlDelightRadioRepositoryTest` proved the
+  alternative: a cascade that does not happen is a cascade nobody notices until
+  a radio is deleted with its links still attached.
+* **`PRAGMA user_version` is the only schema counter.** The JDBC driver creates
+  the schema without writing it, so `create()` writes it explicitly — a database
+  at version 0 would otherwise be re-"migrated" forever, silently.
+* **One process, by name.** `DatabaseLock` refuses a second session and names
+  the PID that holds it. A lock file left by a crash is checked against the
+  process table rather than trusted.
+
 ## Module dependency rule
 
 ```

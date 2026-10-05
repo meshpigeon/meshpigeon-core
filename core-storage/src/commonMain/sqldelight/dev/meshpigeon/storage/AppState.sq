@@ -1,0 +1,32 @@
+-- AppState
+--
+-- Scalars only, and the search index — never a second schema-version counter.
+--
+-- Plan §8.2, landed verbatim: the schema is designed once and is
+-- forward-only from here. A change to it is a reviewed migration, not
+-- an edit — see docs/plans/status.md.
+
+-- Scalars only; nested structures get a column or a table, never JSON.
+CREATE TABLE setting (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) WITHOUT ROWID;
+-- keys: created_at · created_by_app_version · search_backend ('fts5'|'like')
+CREATE TABLE db_meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) WITHOUT ROWID;
+
+-- Search: a standard (self-contained) FTS5 table kept in sync by triggers.
+-- Self-contained rather than external-content so a bug can never desynchronise
+-- the index from the table, and identity_id UNINDEXED avoids a join per query.
+CREATE VIRTUAL TABLE message_fts USING fts5(
+  body, sender_name, identity_id UNINDEXED,
+  tokenize = 'unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER message_fts_ai AFTER INSERT ON message BEGIN
+  INSERT INTO message_fts(rowid, body, sender_name, identity_id)
+  VALUES (new.rowid, COALESCE(new.body,''), COALESCE(new.sender_name,''), new.identity_id);
+END;
+CREATE TRIGGER message_fts_ad AFTER DELETE ON message BEGIN
+  DELETE FROM message_fts WHERE rowid = old.rowid;
+END;
+CREATE TRIGGER message_fts_au AFTER UPDATE ON message BEGIN
+  DELETE FROM message_fts WHERE rowid = old.rowid;
+  INSERT INTO message_fts(rowid, body, sender_name, identity_id)
+  VALUES (new.rowid, COALESCE(new.body,''), COALESCE(new.sender_name,''), new.identity_id);
+END;

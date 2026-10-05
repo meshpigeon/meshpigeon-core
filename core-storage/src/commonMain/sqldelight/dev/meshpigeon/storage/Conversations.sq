@@ -1,0 +1,108 @@
+-- Conversations
+--
+-- Contacts, channels, conversations, messages, and the outbox that sends them.
+--
+-- Plan §8.2, landed verbatim: the schema is designed once and is
+-- forward-only from here. A change to it is a reviewed migration, not
+-- an edit — see docs/plans/status.md.
+
+CREATE TABLE contact (
+  id TEXT PRIMARY KEY NOT NULL,
+  identity_id TEXT NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+  address BLOB NOT NULL, display_name TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('advert','qr','link','manual','seen')),
+  first_seen_at INTEGER NOT NULL, last_seen_at INTEGER,
+  is_accepted INTEGER NOT NULL DEFAULT 1 CHECK (is_accepted IN (0,1)),
+  blocked_at INTEGER, note TEXT,
+  last_lat REAL, last_lon REAL, last_alt_m INTEGER, last_location_at INTEGER,
+  UNIQUE (identity_id, address)
+);
+CREATE INDEX contact_identity ON contact(identity_id, display_name);
+
+CREATE TABLE meshtastic_contact_ext (
+  contact_id TEXT PRIMARY KEY REFERENCES contact(id) ON DELETE CASCADE,
+  node_num INTEGER NOT NULL, hw_model TEXT, role TEXT,
+  is_licensed INTEGER NOT NULL DEFAULT 0 CHECK (is_licensed IN (0,1))
+) WITHOUT ROWID;
+
+CREATE TABLE channel (
+  id TEXT PRIMARY KEY NOT NULL,
+  identity_id TEXT NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('public','hashtag','private','direct')),
+  display_name TEXT NOT NULL,
+  key_sealed BLOB,                                -- sealed channel key / PSK
+  channel_index INTEGER,                          -- typed protocol-meaningful slot
+  created_at INTEGER NOT NULL,
+  is_pinned INTEGER NOT NULL DEFAULT 0 CHECK (is_pinned IN (0,1)),
+  is_muted  INTEGER NOT NULL DEFAULT 0 CHECK (is_muted  IN (0,1)),
+  notify_mode TEXT NOT NULL DEFAULT 'default'
+);
+
+CREATE TABLE conversation (
+  id TEXT PRIMARY KEY NOT NULL,
+  identity_id TEXT NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('dm','channel','group','trace')),
+  contact_id TEXT REFERENCES contact(id) ON DELETE CASCADE,
+  channel_id TEXT REFERENCES channel(id) ON DELETE CASCADE,
+  unread_count INTEGER NOT NULL DEFAULT 0 CHECK (unread_count >= 0),
+  is_pinned INTEGER NOT NULL DEFAULT 0 CHECK (is_pinned IN (0,1)),
+  is_muted  INTEGER NOT NULL DEFAULT 0 CHECK (is_muted  IN (0,1)),
+  notify_mode TEXT NOT NULL DEFAULT 'default',
+  last_message_at INTEGER,
+  is_request INTEGER NOT NULL DEFAULT 0 CHECK (is_request IN (0,1)),
+  created_at INTEGER NOT NULL
+);
+-- COALESCE avoids the SQLite NULL-in-UNIQUE gotcha (NULLs compare distinct).
+CREATE UNIQUE INDEX conversation_uniq
+  ON conversation(identity_id, kind, COALESCE(contact_id,''), COALESCE(channel_id,''));
+CREATE INDEX conversation_recent ON conversation(identity_id, last_message_at DESC);
+
+CREATE TABLE message (
+  id TEXT PRIMARY KEY NOT NULL,
+  conversation_id TEXT NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+  identity_id TEXT NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+  direction TEXT NOT NULL CHECK (direction IN ('in','out')),
+  kind TEXT NOT NULL CHECK (kind IN
+    ('text','location','contact_card','channel_share','reaction','system')),
+  body TEXT,                                      -- normalized text (searchable)
+  payload BLOB,                                   -- canonical payload bytes, pre-encryption
+  sender_contact_id TEXT REFERENCES contact(id) ON DELETE SET NULL,
+  sender_address BLOB, sender_name TEXT,
+  created_at INTEGER NOT NULL,
+  delivery_state TEXT,                            -- internal; mapped per protocol for display
+  rssi INTEGER, snr REAL, hop_count INTEGER, rtt_ms INTEGER,
+  ack_key BLOB,                                   -- O(1) ACK → message matching
+  content_hash BLOB,
+  reply_to_id TEXT REFERENCES message(id) ON DELETE SET NULL,  -- never cascade
+  packet_id INTEGER REFERENCES packet(id) ON DELETE SET NULL,
+  edited_at INTEGER, deleted_at INTEGER
+);
+CREATE INDEX message_conversation ON message(conversation_id, created_at, id);
+CREATE INDEX message_recent       ON message(identity_id, created_at DESC);
+CREATE INDEX message_reply_to     ON message(reply_to_id) WHERE reply_to_id IS NOT NULL;
+CREATE UNIQUE INDEX message_ack_key ON message(ack_key) WHERE ack_key IS NOT NULL;
+CREATE INDEX message_content_hash  ON message(content_hash) WHERE content_hash IS NOT NULL;
+
+CREATE TABLE outbox (
+  id TEXT PRIMARY KEY NOT NULL,
+  identity_id TEXT NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+  conversation_id TEXT NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+  message_id TEXT NOT NULL REFERENCES message(id) ON DELETE CASCADE,
+  radio_id TEXT REFERENCES radio_device(id) ON DELETE SET NULL,
+  packet_raw BLOB NOT NULL,                       -- ack_key lives on the message, not here
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at INTEGER NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('pending','inflight','acked','failed')),
+  hop_limit INTEGER, is_direct INTEGER,
+  created_at INTEGER NOT NULL, last_error TEXT
+);
+CREATE INDEX outbox_due ON outbox(state, next_attempt_at);
+
+-- Declared, protocol-driven delivery knobs (D7/D26): generic columns, so this
+-- table never grows a MeshCore- or Meshtastic-shaped column.
+CREATE TABLE delivery_policy (
+  identity_id     TEXT NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+  conversation_id TEXT NOT NULL DEFAULT '',       -- '' = identity-wide scope
+  option_id TEXT NOT NULL, value TEXT NOT NULL, updated_at INTEGER NOT NULL,
+  PRIMARY KEY (identity_id, conversation_id, option_id)
+) WITHOUT ROWID;

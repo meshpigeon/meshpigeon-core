@@ -1,0 +1,23 @@
+-- ProtocolRegistry
+--
+-- What protocols this build knows, and free-form metadata for them.
+--
+-- Plan §8.2, landed verbatim: the schema is designed once and is
+-- forward-only from here. A change to it is a reviewed migration, not
+-- an edit — see docs/plans/status.md.
+
+CREATE TABLE protocol (
+  id            TEXT PRIMARY KEY NOT NULL,      -- 'meshpigeon.meshcore.v1'
+  display_name  TEXT NOT NULL,
+  version       INTEGER NOT NULL,
+  is_builtin    INTEGER NOT NULL DEFAULT 1,
+  registered_at INTEGER NOT NULL
+);
+
+-- Escape hatch for genuinely free-form protocol metadata. Typed protocol data
+-- belongs in the protocol's own table, not here.
+CREATE TABLE protocol_property (
+  protocol_id TEXT NOT NULL REFERENCES protocol(id) ON DELETE CASCADE,
+  key   TEXT NOT NULL, value TEXT NOT NULL,
+  PRIMARY KEY (protocol_id, key)
+) WITHOUT ROWID;

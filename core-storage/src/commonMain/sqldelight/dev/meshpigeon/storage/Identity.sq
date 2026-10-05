@@ -1,0 +1,39 @@
+-- Identity
+--
+-- One identity per install, its private keys sealed, and its protocol extras.
+--
+-- Plan §8.2, landed verbatim: the schema is designed once and is
+-- forward-only from here. A change to it is a reviewed migration, not
+-- an edit — see docs/plans/status.md.
+
+CREATE TABLE identity (
+  id            TEXT PRIMARY KEY NOT NULL,       -- UUIDv7
+  protocol_id   TEXT NOT NULL REFERENCES protocol(id),
+  display_name  TEXT NOT NULL,
+  created_at    INTEGER NOT NULL,
+  last_used_at  INTEGER,
+  is_active     INTEGER NOT NULL DEFAULT 0 CHECK (is_active IN (0,1)),
+  -- byte arrays (the only BLOBs here): keys and the on-air address
+  public_key         BLOB NOT NULL,             -- Ed25519, both protocols
+  address            BLOB NOT NULL,             -- MeshCore addr hash | Meshtastic node num (LE)
+  private_key_sealed BLOB NOT NULL,             -- sealed at rest
+  advert_policy  TEXT NOT NULL DEFAULT 'manual',
+  last_advert_at INTEGER
+);
+-- "Exactly one active identity" is a database invariant, not a code convention.
+CREATE UNIQUE INDEX identity_one_active ON identity(is_active) WHERE is_active = 1;
+CREATE UNIQUE INDEX identity_address ON identity(protocol_id, address);
+
+-- Protocol-owned extension tables: real columns, real types, no BLOBs (D30).
+CREATE TABLE meshcore_identity_ext (
+  identity_id TEXT PRIMARY KEY REFERENCES identity(id) ON DELETE CASCADE,
+  flags INTEGER NOT NULL DEFAULT 0,
+  has_shared_secret INTEGER NOT NULL DEFAULT 0 CHECK (has_shared_secret IN (0,1))
+) WITHOUT ROWID;
+
+CREATE TABLE meshtastic_identity_ext (
+  identity_id TEXT PRIMARY KEY REFERENCES identity(id) ON DELETE CASCADE,
+  node_num INTEGER NOT NULL UNIQUE,             -- client-assigned
+  long_name TEXT, short_name TEXT, role TEXT,
+  is_licensed INTEGER NOT NULL DEFAULT 0 CHECK (is_licensed IN (0,1))
+) WITHOUT ROWID;

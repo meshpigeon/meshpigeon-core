@@ -1,0 +1,35 @@
+-- PacketJournal
+--
+-- Raw on-air packets, bounded and prunable, with a typed decode summary.
+--
+-- Plan §8.2, landed verbatim: the schema is designed once and is
+-- forward-only from here. A change to it is a reviewed migration, not
+-- an edit — see docs/plans/status.md.
+
+CREATE TABLE packet (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,   -- referenced by message.packet_id
+  radio_id     TEXT REFERENCES radio_device(id) ON DELETE SET NULL,
+  protocol_id  TEXT REFERENCES protocol(id),        -- NULL until a protocol claims it
+  device_seq   INTEGER,                             -- the radio's store seq (cursor)
+  direction    TEXT NOT NULL CHECK (direction IN ('rx','tx')),
+  raw          BLOB NOT NULL,                       -- raw on-air bytes
+  rssi INTEGER, snr REAL, radio_uptime_ms INTEGER,
+  observed_at  INTEGER NOT NULL,                    -- wall clock via ClockMapper
+  seen_count   INTEGER NOT NULL DEFAULT 1,
+  decode_state TEXT NOT NULL
+    CHECK (decode_state IN ('undecoded','decoded','foreign','error')),
+  -- typed decode summary: no JSON, nothing to parse
+  decoded_kind       TEXT,
+  decoded_src        BLOB,                          -- sender address (byte array)
+  decoded_channel_id TEXT REFERENCES channel(id) ON DELETE SET NULL,
+  tx_outcome TEXT CHECK (tx_outcome IS NULL OR tx_outcome IN ('accepted','sent','failed'))
+);
+CREATE INDEX packet_recent    ON packet(observed_at DESC, id DESC);  -- stable ordering + prune scan
+CREATE INDEX packet_radio     ON packet(radio_id, device_seq);
+CREATE INDEX packet_protocol  ON packet(protocol_id, observed_at DESC);
+
+CREATE TABLE packet_tag (
+  identity_id TEXT NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+  tag BLOB NOT NULL, first_seen_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL,
+  PRIMARY KEY (identity_id, tag)
+) WITHOUT ROWID;

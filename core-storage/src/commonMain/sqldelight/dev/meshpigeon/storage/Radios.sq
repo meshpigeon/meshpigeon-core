@@ -1,0 +1,117 @@
+-- Radios
+--
+-- What DeviceInfo reported, and nothing more — plus the ways to reach the same radio.
+--
+-- Plan §8.2, landed verbatim: the schema is designed once and is
+-- forward-only from here. A change to it is a reviewed migration, not
+-- an edit — see docs/plans/status.md.
+
+CREATE TABLE radio_device (
+  id            TEXT PRIMARY KEY NOT NULL,
+  persistent_id TEXT NOT NULL UNIQUE,           -- BLE MAC / usb path / host:port
+  name          TEXT NOT NULL,
+  board_name    TEXT,                           -- as reported; never a chip part number
+  fw_version    TEXT, spec_version INTEGER,
+  pin_sealed    BLOB,                           -- the device PIN, sealed
+  -- DeviceInfo.capabilities as columns; unknown capabilities are ignored
+  supports_wifi INTEGER NOT NULL DEFAULT 0 CHECK (supports_wifi IN (0,1)),
+  supports_ble  INTEGER NOT NULL DEFAULT 0 CHECK (supports_ble  IN (0,1)),
+  supports_usb  INTEGER NOT NULL DEFAULT 0 CHECK (supports_usb  IN (0,1)),
+  has_battery   INTEGER NOT NULL DEFAULT 0 CHECK (has_battery   IN (0,1)),
+  first_seen_at INTEGER NOT NULL, last_seen_at INTEGER,
+  last_battery_mv INTEGER, last_noise_floor_dbm INTEGER
+);
+
+-- One device, several ways to reach it: typed columns, not one address string.
+CREATE TABLE radio_link (
+  id       TEXT PRIMARY KEY NOT NULL,
+  radio_id TEXT NOT NULL REFERENCES radio_device(id) ON DELETE CASCADE,
+  kind     TEXT NOT NULL CHECK (kind IN ('tcp','usb','ble')),
+  host     TEXT, port       INTEGER,            -- tcp
+  device_path TEXT, baud    INTEGER,            -- usb
+  endpoint_id  TEXT,                            -- ble
+  pref_order INTEGER NOT NULL DEFAULT 0,
+  is_preferred INTEGER NOT NULL DEFAULT 0 CHECK (is_preferred IN (0,1)),
+  last_connected_at INTEGER, last_error TEXT,
+  -- Decisive because `kind` is NOT NULL: a mismatch yields FALSE, never NULL,
+  -- and a NULL CHECK result would *pass* in SQLite.
+  CHECK (
+    (kind = 'tcp' AND host IS NOT NULL AND port IS NOT NULL) OR
+    (kind = 'usb' AND device_path IS NOT NULL) OR
+    (kind = 'ble' AND endpoint_id IS NOT NULL)
+  )
+);
+CREATE INDEX radio_link_radio ON radio_link(radio_id);
+CREATE UNIQUE INDEX radio_link_one_preferred ON radio_link(radio_id) WHERE is_preferred = 1;
+
+CREATE TABLE radio_sync_cursor (
+  radio_id TEXT NOT NULL REFERENCES radio_device(id) ON DELETE CASCADE,
+  link_id  TEXT NOT NULL REFERENCES radio_link(id)  ON DELETE CASCADE,
+  seq INTEGER NOT NULL DEFAULT 0, seen_at INTEGER NOT NULL,
+  PRIMARY KEY (radio_id, link_id)
+) WITHOUT ROWID;
+
+-- ── queries: the radio repository ───────────────────────────────────────────
+--
+-- Named rather than inline SQL so the SQL lives here, where a reviewer can read
+-- the whole radio half of the schema in one file.
+
+-- Most recently seen first; `id` breaks a tie so the order is stable.
+selectAll:
+SELECT *
+FROM radio_device
+ORDER BY last_seen_at DESC, id;
+
+selectById:
+SELECT * FROM radio_device WHERE id = ?;
+
+selectByPersistentId:
+SELECT * FROM radio_device WHERE persistent_id = ?;
+
+-- INSERT OR REPLACE, because "record what the radio said" must be idempotent
+-- in `persistent_id`: a radio that answers twice is one radio.
+insert:
+INSERT OR REPLACE INTO radio_device(
+  id, persistent_id, name, board_name, fw_version, spec_version, pin_sealed,
+  supports_wifi, supports_ble, supports_usb, has_battery,
+  first_seen_at, last_seen_at, last_battery_mv, last_noise_floor_dbm
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Everything `first_seen_at` and `persistent_id` own is not written here: those
+-- are set once, and rewriting them would be how a renamed radio loses its id.
+update:
+UPDATE radio_device
+SET name = ?, board_name = ?, fw_version = ?, spec_version = ?,
+    supports_wifi = ?, supports_ble = ?, supports_usb = ?, has_battery = ?,
+    last_seen_at = ?, last_battery_mv = ?, last_noise_floor_dbm = ?
+WHERE id = ?;
+
+deleteById:
+DELETE FROM radio_device WHERE id = ?;
+
+selectLinksByRadio:
+SELECT *
+FROM radio_link
+WHERE radio_id = ?
+ORDER BY pref_order, id;
+
+insertLink:
+INSERT OR REPLACE INTO radio_link(
+  id, radio_id, kind, host, port, device_path, baud, endpoint_id,
+  pref_order, is_preferred, last_connected_at, last_error
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Demoting happens in the same transaction as the promotion, so a radio can
+-- never be left with two preferred links by a failure in between.
+clearPreferred:
+UPDATE radio_link SET is_preferred = 0 WHERE radio_id = ? AND is_preferred = 1;
+
+deleteLinkById:
+DELETE FROM radio_link WHERE id = ?;
+
+recordLinkOutcome:
+UPDATE radio_link
+SET last_connected_at = ?, last_error = ?
+WHERE id = ?;
