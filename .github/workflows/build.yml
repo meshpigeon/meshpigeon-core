@@ -1,0 +1,73 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-all:
+    name: build every target
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # The firmware submodule is pinned to a commit; a bump is a reviewed
+          # change to that line, not an accident.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: assemble the JVM jar and every native binary
+        run: ./gradlew --no-daemon assemble
+
+      - name: upload the native binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: meshpigeon-core-jars
+          path: |
+            */build/libs/*.jar
+            */build/libs/*.klib
+          if-no-files-found: warn
+
+  test-common:
+    name: common tests (JVM + native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: libcrypt (okio links it on Linux)
+        run: sudo apt-get update && sudo apt-get install -y libxcrypt1
+      # Common tests run on the JVM and on a native target: the framing and the
+      # radio session are the two things a JVM-only run would not prove.
+      - run: ./gradlew --no-daemon jvmTest linuxX64Test checkModuleDependencies
+
+  buf:
+    name: radio schema has not drifted
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # The submodule is the pinned copy; this compares its descriptor set with
+      # the firmware's main, so a schema change there pings us here instead of
+      # producing a client that silently misreads a field.
+      - name: descriptor-set drift
+        run: sh scripts/check-proto-drift.sh
