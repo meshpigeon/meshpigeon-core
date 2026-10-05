@@ -115,3 +115,16 @@ recordLinkOutcome:
 UPDATE radio_link
 SET last_connected_at = ?, last_error = ?
 WHERE id = ?;
+
+-- Counts, for `/db`. `count(*)` in SQL rather than in Kotlin: a session that
+-- loaded every radio to count them would be reading rows it does not need.
+countRadios:
+SELECT count(*) FROM radio_device;
+
+countLinks:
+SELECT count(*) FROM radio_link;
+
+-- `pin_sealed` lives on the device, and stays null until P3 supplies the cipher
+-- (D53); this is how `/db` can say so without guessing.
+countSealedPins:
+SELECT count(*) FROM radio_device WHERE pin_sealed IS NOT NULL;

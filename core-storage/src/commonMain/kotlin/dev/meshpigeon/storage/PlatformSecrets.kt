@@ -17,6 +17,25 @@ internal fun keyFileFor(home: String): String = "$home/$KEY_FILE_NAME"
 internal fun keyFileRefusal(home: String, reason: String): String =
     "$home's master key cannot be used: $reason"
 
+/**
+ * Whether [home] already has a master key.
+ *
+ * Asking must not create one: "is there a key yet" and "make me a key" are
+ * different questions, and a `/db` that answered the first by doing the second
+ * would report a key it had just made.
+ */
+internal expect fun masterKeyExists(home: String): Boolean
+
+/**
+ * Creates [path] and every directory above it, if they are not there.
+ *
+ * A first run has no `~/.local/share/meshpigeon` yet, and a database that
+ * refused to open because its own directory was missing would be a strange
+ * first impression. One level of `mkdir` is not enough — `home` can be several
+ * deep — so this walks down from the root the way `mkdir -p` does.
+ */
+internal expect fun ensureDirectory(path: String)
+
 /** 32 bytes of key, or a refusal that says which file was at fault. */
 internal fun requireKey(bytes: ByteArray?, home: String): ByteArray = when {
     bytes == null -> throw IllegalStateException(keyFileRefusal(home, "there is no key at ${keyFileFor(home)}"))

@@ -67,3 +67,5 @@ private fun readPid(lockPath: String): Int? {
 
 /** `S_IRUSR | S_IWUSR` — the lock is the owner's business. */
 private const val OWNER_FILE_ONLY = 0x180
+
+public actual fun currentProcessId(): Int = getpid().convert()

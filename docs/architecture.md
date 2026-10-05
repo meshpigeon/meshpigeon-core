@@ -137,6 +137,17 @@ Four decisions carry the weight:
 * **One process, by name.** `DatabaseLock` refuses a second session and names
   the PID that holds it. A lock file left by a crash is checked against the
   process table rather than trusted.
+* **The native driver takes a database *name*, not a path.** SQLDelight's
+  `NativeSqliteDriver` is SQLIter underneath, and SQLIter rejects a name with a
+  path separator — it picks the directory itself. That directory is
+  `Extended.basePath`, so `DatabaseDriverFactory` splits the path: the basename
+  goes to the driver, the directory to `basePath`. The JVM driver takes a path
+  directly, which is why only the native side of the `expect` has to do this.
+* **Pragmas run through the query path, never `execute`.** On SQLIter, `execute`
+  is Android's `execSQL`, which refuses any statement that returns rows — and
+  `journal_mode = WAL` and `busy_timeout = 5000` both answer with the value they
+  set. JDBC is lenient, so this only bites natively: `applyPragmas` reads and
+  writes every pragma as a query, whatever it returns.
 
 ## Module dependency rule
 

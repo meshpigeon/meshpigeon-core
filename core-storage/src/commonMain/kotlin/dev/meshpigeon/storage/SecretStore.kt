@@ -43,6 +43,15 @@ public class SecretStore internal constructor(masterKey: ByteArray) {
          */
         public fun open(home: String): SecretStore =
             SecretStore(requireKey(loadOrCreateMasterKey(home), home))
+
+        /**
+         * Whether [home] has a master key already, without making one.
+         *
+         * For a session that wants the key *later* and a `/db` that wants to say
+         * so now: opening the store on a first run creates the key, and a report
+         * that created what it reported on would be measuring itself.
+         */
+        public fun hasMasterKey(home: String): Boolean = masterKeyExists(home)
     }
 }
 

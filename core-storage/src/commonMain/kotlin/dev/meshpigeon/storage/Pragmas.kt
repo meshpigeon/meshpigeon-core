@@ -18,15 +18,42 @@ import app.cash.sqldelight.db.SqlDriver
  *   "one process" rule keeps that a rare case rather than the normal one.
  */
 public fun SqlDriver.applyPragmas() {
-    execute(null, "PRAGMA journal_mode = WAL;", 0)
-    execute(null, "PRAGMA synchronous = NORMAL;", 0)
-    execute(null, "PRAGMA foreign_keys = ON;", 0)
-    execute(null, "PRAGMA busy_timeout = 5000;", 0)
+    // Through the *query* path, never `execute`: on the native driver `execute`
+    // is SQLIter's `execSQL`, which refuses any statement that returns rows — and
+    // `journal_mode = WAL` and `busy_timeout = 5000` both answer with the value
+    // they just set. A pragma is a query whether or not anyone reads the answer.
+    pragma("PRAGMA journal_mode = WAL;")
+    pragma("PRAGMA synchronous = NORMAL;")
+    pragma("PRAGMA foreign_keys = ON;")
+    pragma("PRAGMA busy_timeout = 5000;")
+}
+
+/** Runs a statement for its effect, discarding any row it returns. */
+private fun SqlDriver.pragma(sql: String) {
+    executeQuery(null, sql, { _ -> QueryResult.Value(Unit) }, 0).value
 }
 
 /** What `PRAGMA user_version` says — the single source of schema truth. */
 public fun SqlDriver.schemaVersion(): Long =
     executeQuery(null, "PRAGMA user_version;", { cursor ->
+        QueryResult.Value(if (cursor.next().value) cursor.getLong(0) ?: 0L else 0L)
+    }, 0).value
+
+/** What `PRAGMA journal_mode` says — `wal` on a healthy database. */
+public fun SqlDriver.journalMode(): String =
+    executeQuery(null, "PRAGMA journal_mode;", { cursor ->
+        QueryResult.Value(if (cursor.next().value) cursor.getString(0).orEmpty() else "")
+    }, 0).value
+
+/**
+ * The file's size in bytes, from SQLite rather than from the filesystem.
+ *
+ * `page_count * page_size` is the database itself; a file length would also
+ * count whatever WAL happens to be beside it, which is not what "how big is the
+ * database" means.
+ */
+public fun SqlDriver.databaseSizeBytes(): Long =
+    executeQuery(null, "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size();", { cursor ->
         QueryResult.Value(if (cursor.next().value) cursor.getLong(0) ?: 0L else 0L)
     }, 0).value
 

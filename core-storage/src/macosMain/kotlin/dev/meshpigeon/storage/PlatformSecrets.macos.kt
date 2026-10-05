@@ -5,8 +5,10 @@ package dev.meshpigeon.storage
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.usePinned
+import platform.posix.F_OK
 import platform.posix.O_CREAT
 import platform.posix.O_RDWR
+import platform.posix.access
 import platform.posix.close
 import platform.posix.errno
 import platform.posix.mkdir
@@ -81,3 +83,25 @@ private fun readFully(path: String, bytes: ByteArray, handle: Int = -1): Int {
  */
 private const val OWNER_DIRECTORY_ONLY = 0x1C0
 private const val OWNER_FILE_ONLY = 0x180
+
+/**
+ * Whether the key file is there.
+ *
+ * `access` rather than `stat`: this asks whether the file can be reached at
+ * all, and `access` does not first require opening the directory it is in.
+ */
+internal actual fun masterKeyExists(home: String): Boolean = access(keyFileFor(home), F_OK) == 0
+
+/**
+ * `mkdir -p`: create each level from the top down, because one `mkdir` makes a
+ * single directory and `home` can be several deep.
+ *
+ * `mkdir` fails when the directory is already there, which is not a failure here
+ * — the whole point is to be idempotent on a home that already exists.
+ */
+internal actual fun ensureDirectory(path: String) {
+    if (path.isEmpty() || path == "/") return
+    val parent = path.substringBeforeLast('/', "")
+    if (parent.isNotEmpty() && parent != path) ensureDirectory(parent)
+    mkdir(path, OWNER_DIRECTORY_ONLY.convert())
+}

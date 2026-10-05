@@ -37,3 +37,6 @@ public expect fun heldProcessId(databasePath: String): Int?
 
 /** Whether [pid] names a process that is still running. */
 public expect fun isRunning(pid: Int): Boolean
+
+/** This process's ID — what a session reports as the lock holder. */
+public expect fun currentProcessId(): Int

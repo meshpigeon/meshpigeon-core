@@ -11,6 +11,10 @@ kotlin {
     linuxArm64()
     macosX64()
     macosArm64()
+    // Windows is deferred for the *link* modules, which are POSIX and Winsock.
+    // Domain types are plain data with no platform in them, and `core-testing`
+    // needs this target to depend on them.
+    mingwX64()
 
     sourceSets {
         commonMain.dependencies {

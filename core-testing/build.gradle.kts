@@ -22,6 +22,9 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":core-transport"))
+            // The in-memory RadioRepository is part of what a test needs, and
+            // `api` because it is in this module's published signature.
+            api(project(":core-domain"))
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
@@ -37,7 +40,7 @@ mavenPublishing {
     publishToMavenCentral(automaticRelease = true)
     pom {
         name.set("MeshPigeon core testing")
-        description.set("Published fakes: a scripted radio link, a fake radio speaking the real framing and protobuf API, a fake clock and a recording logger.")
+        description.set("Published fakes: a scripted radio link, a fake radio speaking the real framing and protobuf API, an in-memory radio repository, a fake clock and a recording logger.")
         url.set("https://github.com/meshpigeon/meshpigeon-core")
         licenses {
             license {

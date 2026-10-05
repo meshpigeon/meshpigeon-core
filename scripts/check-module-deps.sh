@@ -32,7 +32,8 @@ allowed_for() {
         core-meshtastic) echo "core-domain core-crypto core-common" ;;
         core-storage) echo "core-domain core-common core-crypto" ;;
         core-service) echo "core-storage core-domain core-transport core-meshcore core-meshtastic core-common core-crypto" ;;
-        core-testing) echo "core-common core-transport proto-gen" ;;
+        # The fakes stand in for any of them, including the domain.
+        core-testing) echo "core-common core-transport core-domain proto-gen" ;;
         # The aggregate is the one module allowed to name all of them.
         core-aggregate) echo "proto-gen core-common core-transport core-link-tcp core-link-usb core-link-ble core-domain core-meshcore core-meshtastic core-storage core-service core-crypto" ;;
         *) echo "" ;;

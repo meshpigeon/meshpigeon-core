@@ -51,3 +51,6 @@ private fun readPid(lockPath: String): Int? {
     if (!file.isFile) return null
     return runCatching { file.readText().substringAfter("pid ", "").trim().toIntOrNull() }.getOrNull()
 }
+
+/** The same answer the lock writes, from the same source it already uses. */
+public actual fun currentProcessId(): Int = ProcessHandle.current().pid().toInt()

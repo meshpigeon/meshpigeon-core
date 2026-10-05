@@ -29,4 +29,11 @@ internal actual fun loadOrCreateMasterKey(home: String): ByteArray? {
     return fresh
 }
 
+internal actual fun masterKeyExists(home: String): Boolean = File(keyFileFor(home)).isFile
+
 internal actual fun newMasterKey(): ByteArray = ByteArray(MASTER_KEY_BYTES).also { SecureRandom().nextBytes(it) }
+
+/** `mkdirs`, which is exactly "create it and every directory above it". */
+internal actual fun ensureDirectory(path: String) {
+    File(path).mkdirs()
+}
