@@ -73,6 +73,40 @@ client's tests can therefore drive a real session end to end with no simulator
 and no bench, and the fakes double as a contract test of the framing in both
 directions.
 
+## Two links, one API
+
+`core-link-tcp` and `core-link-usb` both implement `RadioLink` and neither knows
+what is above it. The same session drives a radio on a network and a radio in a
+USB cable, because the verbs, correlation, authentication and store semantics
+live in `core-transport` and only the pipe differs.
+
+The USB half is where the platform boundary is sharpest:
+
+```
+dev.ttyACM0 (Linux)          /dev/cu.usbmodem* (macOS)
+        │                            │
+   termios: open, tcgetattr,   the same, with ULong where Linux
+   cfmakeraw, tcsetattr,      has UInt — hence one file each
+   poll, read, write
+        │                            │
+   NativeSerialPort            NativeSerialPort
+        └──────────────┬─────────────┘
+                       ▼
+             UsbRadioLink : RadioLink
+```
+
+Two decisions are worth knowing before touching it:
+
+* **`SerialPort` is public, not internal.** On Android a USB host has a claimed
+  interface, not a device path: `UsbDeviceConnection` gives bulk-in and bulk-out
+  streams. So the port is an interface a client can satisfy, and the JVM ships
+  one (`StreamSerialPort`) that the app can hand its own streams to.
+* **A pty is a real serial device**, with a real line discipline and real
+  `termios` semantics. That is what makes `TermiosPtyTest` possible: the
+  cinterop is checked against the kernel without a radio on the desk. What it
+  cannot prove is the cable, the enumeration and a baud rate a real bridge
+  negotiates — those stay with the hardware.
+
 ## Module dependency rule
 
 ```

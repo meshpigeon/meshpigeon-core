@@ -36,6 +36,7 @@ kotlin {
             api(project(":core-common"))
             api(project(":core-transport"))
             api(project(":core-link-tcp"))
+            api(project(":core-link-usb"))
         }
     }
 }

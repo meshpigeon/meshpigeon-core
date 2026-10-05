@@ -23,10 +23,10 @@ name, capabilities, health, a tuning. Adding a board is a firmware change.
 
 ## Status
 
-Phases P0 and P1 of `docs/plans/2026-10-04-meshpigeon-core-and-cli-plan.md`:
-the radio API, the framing, the session, and the TCP transport, with `mp`
-driving a real `meshpigeon-sim` end to end. Storage, identity, protocols and the
-service layer follow in P2–P4.
+Phases P0, P1 and the first half of P2 of
+`docs/plans/2026-10-04-meshpigeon-core-and-cli-plan.md`: the radio API, the
+framing, the session, and both of the transports a radio can be reached on —
+TCP and USB-CDC. Storage, identity, protocols and the service layer follow.
 
 | Module | What it is |
 |---|---|
@@ -34,6 +34,7 @@ service layer follow in P2–P4.
 | `core-common` | ids, hex/base64, `Outcome`, `Clock`, `Logger`, COBS, CRC-16, `FrameReader` |
 | `core-transport` | `RadioApi` (the firmware's contract as domain types), `RadioSession`, the `RadioLink` SPI |
 | `core-link-tcp` | the Wi-Fi TCP transport — one source file per native platform |
+| `core-link-usb` | USB-CDC: `termios` on Linux and macOS, streams on the JVM, and the seam an Android USB host uses |
 | `core-testing` | published fakes: a radio that answers like the firmware, a clock, a logger |
 | `core-aggregate` | the `dev.meshpigeon:meshpigeon-core` artifact clients depend on |
 
@@ -64,8 +65,8 @@ per-module artifacts exist for anyone who needs to be narrower.
 ```
 
 Kotlin 2.2.21 · Gradle 8.14.5 · Linux, macOS and the JVM today; Windows
-returns with the rest of the Windows phase (see the note in
-`core-link-tcp/build.gradle.kts`).
+returns with the rest of the Windows phase (see the notes in
+`core-link-tcp/build.gradle.kts` and `core-link-usb/build.gradle.kts`).
 
 ## Publishing
 
@@ -78,6 +79,7 @@ One coordinate to depend on, and the parts beneath it:
 | `dev.meshpigeon:meshpigeon-core-common` | framing, ids, encodings, clock, logging |
 | `dev.meshpigeon:meshpigeon-core-transport` | `RadioApi`, `RadioSession`, `RadioLink` |
 | `dev.meshpigeon:meshpigeon-core-link-tcp` | the Wi-Fi transport |
+| `dev.meshpigeon:meshpigeon-core-link-usb` | the USB-CDC transport |
 | `dev.meshpigeon:meshpigeon-core-testing` | the fakes (test scope, never in the aggregate) |
 
 Each has one publication per target (`-jvm`, `-linuxx64`, `-macosarm64`, …); the
@@ -108,6 +110,9 @@ rather than as a client that misreads a field.
   everything.
 * **One test, two platforms.** The framing and the session run on the JVM and
   natively, because a JVM-only run would not prove the native one.
+* **Platform code is tested against the platform.** `TermiosPtyTest` opens a
+  pty through the USB link and checks what the kernel does with it, so the
+  cinterop is verified without a radio on the desk.
 
 ## Licence
 
