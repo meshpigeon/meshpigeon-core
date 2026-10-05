@@ -60,11 +60,36 @@ per-module artifacts exist for anyone who needs to be narrower.
 ```sh
 ./gradlew build                     # every target, every test
 ./gradlew jvmTest linuxX64Test      # the fast loop: JVM and one native target
+./gradlew publishToMavenLocal       # every coordinate, exactly as it will ship
 ```
 
 Kotlin 2.2.21 · Gradle 8.14.5 · Linux, macOS and the JVM today; Windows
 returns with the rest of the Windows phase (see the note in
 `core-link-tcp/build.gradle.kts`).
+
+## Publishing
+
+One coordinate to depend on, and the parts beneath it:
+
+| Coordinate | What it is |
+|---|---|
+| `dev.meshpigeon:meshpigeon-core` | the aggregate — what a client declares |
+| `dev.meshpigeon:meshpigeon-core-proto` | the generated radio API |
+| `dev.meshpigeon:meshpigeon-core-common` | framing, ids, encodings, clock, logging |
+| `dev.meshpigeon:meshpigeon-core-transport` | `RadioApi`, `RadioSession`, `RadioLink` |
+| `dev.meshpigeon:meshpigeon-core-link-tcp` | the Wi-Fi transport |
+| `dev.meshpigeon:meshpigeon-core-testing` | the fakes (test scope, never in the aggregate) |
+
+Each has one publication per target (`-jvm`, `-linuxx64`, `-macosarm64`, …); the
+coordinate is stated in the module's build file rather than inherited from the
+directory name, so a module can move without renaming the library.
+
+Pushing a `v*` tag runs `.github/workflows/publish.yml`, which checks that the
+tag *is* the declared version and then deploys every publication. It needs three
+repository secrets: `CENTRAL_USERNAME`, `CENTRAL_PASSWORD` and the signing key
+(`SIGNING_KEY`, `SIGNING_KEY_ID`, `SIGNING_KEY_PASSWORD`) — until those exist, the
+tag workflow is the only part of this that has never run, and
+`publishToMavenLocal` is the equivalent check without credentials.
 
 ## The radio schema
 

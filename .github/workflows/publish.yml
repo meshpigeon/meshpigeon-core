@@ -1,0 +1,59 @@
+name: publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# One publication at a time: two tags racing would deploy the same coordinates
+# twice.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish to Maven Central
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # The tag is the version. Anything else is a mistyped tag, and publishing
+      # a version nobody asked for is worse than failing here.
+      - name: the tag is the version
+        run: |
+          declared="$(./gradlew -q properties | sed -n 's/^version: //p')"
+          tagged="${GITHUB_REF_NAME#v}"
+          echo "tag: $tagged   version: $declared"
+          [ "$tagged" = "$declared" ] || {
+            echo "::error::tag $GITHUB_REF_NAME does not match the declared version $declared"
+            exit 1
+          }
+
+      # Release rather than a snapshot: a tag that says 0.1.0 publishes 0.1.0.
+      - name: publish
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon -Pversion="$declared" publishAllPublicationsToMavenCentralRepository
+
+      # Every module and every target, so a failed job says which coordinate is
+      # missing rather than leaving that to the Central web page.
+      - name: what was deployed
+        run: |
+          ./gradlew -q --no-daemon -Pversion="$declared" publishToMavenLocal
+          ls ~/.m2/repository/dev/meshpigeon/

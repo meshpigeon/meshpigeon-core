@@ -8,8 +8,8 @@ The plan this repository implements:
 
 | Phase | Status |
 |---|---|
-| P0 scaffolding | done — KMP skeleton (linuxX64/Arm64, macosX64/Arm64, jvm), CI, `meshpigeon-core-testing`, publishing coordinates, `docs/` |
-| P1 radio API + TCP | done — submodule + drift check, Wire codegen, COBS/CRC in common code with native tests, `RadioApi`/`RadioSession`, `core-link-tcp`, and `mp` driving a real `meshpigeon-sim` end to end |
+| P0 scaffolding | done — KMP skeleton (linuxX64/Arm64, macosX64/Arm64, jvm), CI, `meshpigeon-core-testing`, publishing coordinates (verified consumable from a clean external build; the Central deploy itself needs repository secrets), `docs/` |
+| P1 radio API + TCP | done — submodule + drift check, Wire codegen, COBS/CRC in common code with native tests, `RadioApi`/`RadioSession`, `core-link-tcp`, and `mp` driving a real `meshpigeon-sim` end to end: real `DeviceInfo`, a real re-tune, and the packet store read back and purged |
 | P2 USB-CDC + storage | next — `posix termios`, SQLDelight schema §8.2, `SecretStore`, `/db` |
 | P3 crypto + MeshCore | not started (D23 spike first) |
 | P4 domain + service | not started |
@@ -31,6 +31,8 @@ The plan this repository implements:
 | **D35** | `TcpRadioLink.inbound()` | Exactly one consumer, the session | A shared flow with two collectors splits the bytes between them, and the session sees half of every frame. A link that also drains the flow to track its own state silently steals the traffic |
 | **D36** | Is `/json on`'s own output JSON? | Yes — a command that changes rendering declares `affectsRendering` | Otherwise "the mode changed" is printed in the mode you just left, which is the first thing a script sees and always surprises |
 | **D37** | TCP on Windows (P1) | Deferred to the Windows phase | Not a shortcut so much as the same per-platform split as D4‴, and the Windows work (USB, packaging) arrives then anyway. `mp` still builds for Windows; it has no TCP link until then |
+| **D38** | How is the published coordinate named? | Stated in each module's `mavenPublishing { coordinates(...) }` | The Kotlin plugin names every publication after the *module directory*, per-target ones included, so `core-common` would have shipped as `dev.meshpigeon:core-common-linuxx64`. `coordinates()` is the one call that renames the whole set. Verified by consuming `dev.meshpigeon:meshpigeon-core:0.1.0-SNAPSHOT` from a clean external build |
+| **D39** | The aggregate artifact has no code | It carries one documented `MeshPigeonCore` marker object | A module with no sources produces no klib, and its per-target publications fail at `generateMetadataFileFor…`. The marker is also the one symbol that says "this client is on meshpigeon-core", which is worth having |
 
 ## Deviations from the plan, and why
 
